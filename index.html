@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Yakuza - DSTAT</title>
+  <style>
+    html,
+    body {
+      background: #000000 url("./style/img/bg.gif");
+      height: 100%;
+      margin: 0;
+    }
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+
+    body>div {
+      width: 100%;
+    }
+
+    #chart {
+      width: 80%;
+      margin: auto;
+      border: 1px solid #0f0;
+    }
+  </style>
+</head>
+
+<body>
+  <div>
+    <div id="chart"></div>
+  </div>
+  <script src="https://code.highcharts.com/highcharts.js"></script>
+  <script src="https://code.highcharts.com/modules/exporting.js"></script>
+  <script>
+    window.onload = () => {
+      let previous = null;
+
+      const charts = Highcharts.chart("chart", {
+        exporting: {
+          enabled: false,
+        },
+        plotOptions: {
+          series: {
+            events: {
+              legendItemClick: function (event) {
+                event.preventDefault();
+              },
+            },
+          },
+        },
+        chart: {
+          type: "area",
+          style: {
+            fontFamily: "Arial, Helvetica, sans-serif",
+          },
+          backgroundColor: "transparent",
+        },
+        title: {
+          text: "L7 DSTAT",
+          style: {
+            color: "#0f0",
+          },
+        },
+        xAxis: {
+          type: "datetime",
+          dateTimeLabelFormats: {
+            day: "%a",
+          },
+        },
+        yAxis: {
+          labels: {
+            style: {
+              color: "#0f0",
+            },
+          },
+          title: {
+            text: "Requests / Sec",
+            margin: 50,
+            style: {
+              color: "#0f0",
+            },
+          },
+        },
+        credits: {
+          enabled: false,
+        },
+        legend: {
+          useHTML: true,
+          symbolWidth: 0,
+          labelFormatter: function () {
+            return `
+                <div>
+                  <div style="display: inline-block; margin-right: 5px;"></div>
+                  <span style="color: #0f0;">${this.name}</span>
+                </div>
+              `;
+          },
+        },
+        subtitle: {
+          style: {
+            color: "#0f0",
+            font: 'bold 12px "Arial, Helvetica, sans-serif',
+          },
+        },
+        series: [
+          {
+            type: "area",
+            name: "Total Requests",
+            color: "#0f0",
+            data: [],
+          },
+        ],
+      });
+
+      async function getData() {
+        try {
+          const response = await fetch("/nginx_status", {
+            method: "GET",
+            cache: "no-cache",
+          });
+          if (response.ok) {
+            const text = await response.text();
+
+            let current = 0;
+            let lastValid = 0;
+
+            const part = text.split(' ')[9];
+            const series = charts.series[0];
+            current = parseInt(part);
+            
+            if (
+              (current > 0 && (current - previous) > 0 && (current - previous) < 990000000) ||
+              (current > 0 && (current - previous) > 0 && previous === null)
+            ) {
+              const shift = series.data.length > 40;
+
+              if (previous !== null) {
+                series.addPoint([Math.floor(Date.now()), current - previous], true, shift);
+              }
+
+              lastValid = current - previous;
+              previous = current;
+            } else {
+              previous = null;
+              console.log("Bad response");
+            }
+
+            setTimeout(getData, 1000);
+          } else {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+          }
+        } catch (err) {
+          console.log(err);
+        }
+      }
+
+      (async () => {
+        await getData();
+      })()
+    };
+  </script>
+</body>
+
+</html>
